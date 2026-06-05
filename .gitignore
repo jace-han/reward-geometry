@@ -9,3 +9,12 @@ wheels/
 # Virtual environments
 .venv
 .env
+
+# macOS
+.DS_Store
+
+# Ideas, plans, etc
+.idea/
+*.ipynb
+*.md
+docs/*

@@ -1,15 +1,13 @@
-import torch
-from datasets import load_dataset, Dataset
-N_SAMPLES = 5000
+from datasets import load_dataset
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
+
+N_TRAIN = 10000
+N_VAL = 10000
 SEED = 42
-
-
-
-
-# ============================================================================
-# Format Preference Datasets
-# ============================================================================
-
+OUTPUT_DIR = Path("dataset")
 
 def format_hh_rlhf(example):
     """Parse Anthropic hh-rlhf string format into chat messages."""
@@ -32,14 +30,12 @@ def format_hh_rlhf(example):
     }
 
 def format_ultrafeedback(example):
-    """UltraFeedback already has chat format."""
     return {
         "chosen": example["chosen"],
         "rejected": example["rejected"],
     }
 
 def format_summarize_feedback(example):
-    """Convert summarize_from_feedback comparisons to chat format."""
     post = example["info"]["post"]
     prompt = f"Summarize the following post:\n\n{post}"
     choice_idx = example["choice"]
@@ -57,45 +53,58 @@ def format_summarize_feedback(example):
 
 if __name__ == "__main__":
     datasets_config = {
-    "hh_rlhf": {
-        "name": "Anthropic/hh-rlhf",
-        "formatter": format_hh_rlhf,
-    },
-    "ultrafeedback": {
-        "name": "trl-lib/ultrafeedback_binarized",
-        "formatter": format_ultrafeedback,
-    },
-    "summarize": {
-        "name": "openai/summarize_from_feedback",
-        "formatter": format_summarize_feedback,
-    },}   
-
-    datasets = {}
-    for key, cfg in datasets_config.items():
-        print(f"Loading {key}...")
-        if key != "summarize":
-            ds = load_dataset(cfg["name"])
-            datasets[key] = ds
-        else:
-            datasets[key] = load_dataset(
-                "parquet",
-                data_files={
+        "hh_rlhf": {
+            "name": "Anthropic/hh-rlhf",
+            "formatter": format_hh_rlhf,
+            "train_split": "train",
+            "val_split": "test",
+        },
+        "ultrafeedback": {
+            "name": "trl-lib/ultrafeedback_binarized",
+            "formatter": format_ultrafeedback,
+            "train_split": "train",
+            "val_split": "test",
+        },
+        "summarize": {
+            "name": "openai/summarize_from_feedback",
+            "formatter": format_summarize_feedback,
+            "load_kwargs": {
+                "data_files": {
                     "train": "hf://datasets/openai/summarize_from_feedback@refs/convert/parquet/comparisons/train/*.parquet",
                     "validation": "hf://datasets/openai/summarize_from_feedback@refs/convert/parquet/comparisons/validation/*.parquet",
                 },
-            )
+            },
+            "loader": "parquet",
+            "train_split": "train",
+            "val_split": "validation",
+        },
+    }
 
-    train_ds, val_ds = {}, {}
-    for key, ds in datasets.items():
-        print(f"Formatting {key}...")
-        for split in ds.keys():
-            ds_split = ds[split].shuffle(seed=SEED).select(range(N_SAMPLES))
-            ds_split = ds_split.map(datasets_config[key]["formatter"], remove_columns=ds[split].column_names)
-            if split == "train":
-                train_ds[key] = ds_split
-            else:
-                val_ds[key] = ds_split
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    print("\nAll datasets ready.")
-    print(f"Train datasets:\n {train_ds}")
-    print(f"Validation datasets:\n {val_ds}")
+    for key, cfg in datasets_config.items():
+        print(f"Loading {key}...")
+        if cfg.get("loader") == "parquet":
+            ds = load_dataset("parquet", data_files=cfg["load_kwargs"]["data_files"])
+        else:
+            ds = load_dataset(cfg["name"])
+
+        # Load training set
+        train_split_name = cfg["train_split"]
+        train_raw = ds[train_split_name].shuffle(seed=SEED)
+        n_train = min(len(train_raw), N_TRAIN)
+        train_split = train_raw.select(range(n_train))
+
+        # Load validation set
+        val_split_name = cfg["val_split"]
+        val_raw = ds[val_split_name].shuffle(seed=SEED)
+        n_val = min(len(val_raw), N_VAL)
+        val_split = val_raw.select(range(n_val))
+
+        train_split = train_split.map(cfg["formatter"], remove_columns=train_raw.column_names)
+        val_split = val_split.map(cfg["formatter"], remove_columns=val_raw.column_names)
+        train_split.to_json(OUTPUT_DIR / f"{key}_train.jsonl")
+        val_split.to_json(OUTPUT_DIR / f"{key}_val.jsonl")
+        print(f"  {key}: {len(train_split)} train, {len(val_split)} val")
+
+    print("\nAll datasets prepared and saved to", OUTPUT_DIR)
