@@ -18,6 +18,7 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     EarlyStoppingCallback,
+    set_seed,
 )
 from trl import RewardTrainer, RewardConfig
 import wandb
@@ -30,7 +31,11 @@ MAX_TRAIN = 10_000
 MAX_VAL = 1000
 WANDB_PROJECT = "reward-geometry"
 
+# real preference datasets
 DATASETS = ["hh_rlhf", "ultrafeedback", "summarize"]
+# shuffled-label NULLs for the RQ1 C-control (same data, preference signal destroyed)
+SHUFFLED_DATASETS = ["hh_rlhf_shuffled", "ultrafeedback_shuffled"]
+ALL_DATASETS = DATASETS + SHUFFLED_DATASETS
 
 
 def compute_metrics(eval_pred):
@@ -84,6 +89,11 @@ def train_model(dataset_name: str, resume_from: str = None, smoke_test: bool = F
     val_ds = val_ds.select(range(min(MAX_VAL, len(val_ds))))
 
     print(f"  Train: {len(train_ds)}, Val: {len(val_ds)}")
+
+    # Seed BEFORE model creation so every model gets an IDENTICAL random score-head
+    # init -> any cross-model representational difference is attributable to data,
+    # not head initialization. (RewardConfig(seed=...) only runs later, inside Trainer.)
+    set_seed(SEED)
 
     # Load model and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
@@ -194,8 +204,9 @@ def train_model(dataset_name: str, resume_from: str = None, smoke_test: bool = F
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", type=str, choices=DATASETS, help="Which dataset to train on")
-    parser.add_argument("--all", action="store_true", help="Train all 3 models sequentially")
+    parser.add_argument("--dataset", type=str, choices=ALL_DATASETS, help="Which dataset to train on")
+    parser.add_argument("--all", action="store_true", help="Train all 3 real models sequentially")
+    parser.add_argument("--all-shuffled", action="store_true", help="Train the 2 shuffled-null models sequentially")
     parser.add_argument("--smoke-test", action="store_true", help="Run quick validation (100 samples, 20 steps)")
     parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume from")
     args = parser.parse_args()
@@ -233,6 +244,10 @@ if __name__ == "__main__":
         print("ALL TRAINING COMPLETE")
         print("="*60)
         print(summary)
+    elif args.all_shuffled:
+        for ds_name in SHUFFLED_DATASETS:
+            train_model(ds_name)
+        print("\nShuffled-null models trained. Extract reps, then compute C-control.")
     elif args.dataset:
         train_model(args.dataset, resume_from=args.resume)
     else:
