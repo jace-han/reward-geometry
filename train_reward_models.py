@@ -8,7 +8,7 @@ Usage:
     python train_reward_model.py --dataset summarize
     python train_reward_model.py --all
 """
-
+import sys
 import argparse
 import torch
 import numpy as np
@@ -23,9 +23,11 @@ from trl import RewardTrainer, RewardConfig
 import wandb
 
 BASE_MODEL = "Qwen/Qwen2.5-3B"
-DATA_DIR = Path("dataset")
 CHECKPOINT_DIR = Path("checkpoints")
+HF_NAMESPACE = "jacehan"
 SEED = 42
+MAX_TRAIN = 10_000
+MAX_VAL = 1000
 WANDB_PROJECT = "reward-geometry"
 
 DATASETS = ["hh_rlhf", "ultrafeedback", "summarize"]
@@ -51,6 +53,7 @@ def train_model(dataset_name: str, resume_from: str = None, smoke_test: bool = F
         print("  *** SMOKE TEST MODE — 100 samples, 50 steps ***")
     print(f"{'='*60}")
 
+
     # Init W&B
     run = wandb.init(
         project=WANDB_PROJECT,
@@ -58,21 +61,27 @@ def train_model(dataset_name: str, resume_from: str = None, smoke_test: bool = F
         config={
             "base_model": BASE_MODEL,
             "dataset": dataset_name,
-            "n_train": 100 if smoke_test else 10000,
-            "n_val": 20 if smoke_test else 1000,
+            "n_train": 100 if smoke_test else MAX_TRAIN,
+            "n_val": 20 if smoke_test else MAX_VAL,
             "full_finetune": True,
             "smoke_test": smoke_test,
         },
         reinit=True,
     )
 
-    # Load data
-    train_ds = load_dataset("json", data_files=str(DATA_DIR / f"{dataset_name}_train.jsonl"), split="train")
-    val_ds = load_dataset("json", data_files=str(DATA_DIR / f"{dataset_name}_val.jsonl"), split="train")
+    # Load data from HuggingFace Hub
+    repo_id = f"{HF_NAMESPACE}/{dataset_name}"
+    dataset = load_dataset(repo_id)
+    train_ds = dataset["train"]
+    val_ds = dataset["validation"]
 
     if smoke_test:
         train_ds = train_ds.select(range(min(100, len(train_ds))))
         val_ds = val_ds.select(range(min(20, len(val_ds))))
+
+    # Truncate to exactly 10k rows 
+    train_ds = train_ds.select(range(min(MAX_TRAIN, len(train_ds))))
+    val_ds = val_ds.select(range(min(MAX_VAL, len(val_ds))))
 
     print(f"  Train: {len(train_ds)}, Val: {len(val_ds)}")
 
@@ -86,7 +95,6 @@ def train_model(dataset_name: str, resume_from: str = None, smoke_test: bool = F
         BASE_MODEL,
         num_labels=1,
         torch_dtype=torch.bfloat16,
-        attn_implementation="flash_attention_2",
     )
     model.config.pad_token_id = tokenizer.pad_token_id
 
@@ -204,7 +212,7 @@ if __name__ == "__main__":
         else:
             print(f"\n SMOKE TEST FAILED (accuracy: {acc:.3f})")
             print("Debug before launching full training!")
-        return
+        sys.exit(0)
 
     if args.all:
         results = {}

@@ -4,8 +4,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-N_TRAIN = 10000
-N_VAL = 10000
+N_TRAIN = 15_000
+N_VAL = 15_000
 SEED = 42
 OUTPUT_DIR = Path("dataset")
 
