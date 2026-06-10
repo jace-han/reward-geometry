@@ -59,7 +59,7 @@ def validate_messages(msgs, field):
 
 
 def validate_file(path, tokenizer=None, max_length=512):
-    print(f"\n{'='*60}\n{path}\n{'='*60}")
+    print(f"\n{'=' * 60}\n{path}\n{'=' * 60}")
     if not path.exists():
         print(f"  ✗ MISSING FILE")
         return False
@@ -108,7 +108,10 @@ def validate_file(path, tokenizer=None, max_length=512):
 
             # tokenized length (only if no fatal errors)
             if tokenizer is not None and not fatal_errs:
-                for field, bucket in (("chosen", chosen_lens), ("rejected", rejected_lens)):
+                for field, bucket in (
+                    ("chosen", chosen_lens),
+                    ("rejected", rejected_lens),
+                ):
                     try:
                         toks = tokenizer.apply_chat_template(ex[field], tokenize=True)
                         bucket.append(len(toks))
@@ -127,9 +130,13 @@ def validate_file(path, tokenizer=None, max_length=512):
                     sample_warnings.append(f"line {line_no}: " + "; ".join(warn_msgs))
 
     # ---- report ----
-    print(f"  rows: {n}   fatal errors: {n_fatal}   warnings: {n_warning}   identical: {identical}")
-    print(f"  top role patterns (chosen): "
-          + ", ".join(f"{p}×{c}" for p, c in role_patterns.most_common(3)))
+    print(
+        f"  rows: {n}   fatal errors: {n_fatal}   warnings: {n_warning}   identical: {identical}"
+    )
+    print(
+        f"  top role patterns (chosen): "
+        + ", ".join(f"{p}×{c}" for p, c in role_patterns.most_common(3))
+    )
     if chosen_lens:
         alll = sorted(chosen_lens + rejected_lens)
         p50 = alll[len(alll) // 2]
@@ -156,14 +163,18 @@ def validate_file(path, tokenizer=None, max_length=512):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--max-length", type=int, default=512)
-    ap.add_argument("--base-model", default="Qwen/Qwen2.5-3B",
-                    help="set to '' to skip tokenization checks")
+    ap.add_argument(
+        "--base-model",
+        default="Qwen/Qwen2.5-3B",
+        help="set to '' to skip tokenization checks",
+    )
     args = ap.parse_args()
 
     tokenizer = None
     if args.base_model:
         try:
             from transformers import AutoTokenizer
+
             tokenizer = AutoTokenizer.from_pretrained(args.base_model)
             print(f"Loaded tokenizer: {args.base_model}")
         except Exception as e:
@@ -172,9 +183,15 @@ if __name__ == "__main__":
     all_ok = True
     for name in DATASETS:
         for split in SPLITS:
-            ok = validate_file(DATA_DIR / f"{name}_{split}.jsonl", tokenizer, args.max_length)
+            ok = validate_file(
+                DATA_DIR / f"{name}_{split}.jsonl", tokenizer, args.max_length
+            )
             all_ok = all_ok and ok
 
-    print(f"\n{'='*60}")
-    print("ALL DATASETS VALID ✓" if all_ok else "VALIDATION FAILED ✗ — fix before training")
-    print("='*60" if False else "="*60)
+    print(f"\n{'=' * 60}")
+    print(
+        "ALL DATASETS VALID ✓"
+        if all_ok
+        else "VALIDATION FAILED ✗ — fix before training"
+    )
+    print("='*60" if False else "=" * 60)

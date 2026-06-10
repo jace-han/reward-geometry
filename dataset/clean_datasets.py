@@ -68,7 +68,9 @@ def clean_file(path):
                 continue
 
             # Check message structure
-            if not validate_messages(ex["chosen"]) or not validate_messages(ex["rejected"]):
+            if not validate_messages(ex["chosen"]) or not validate_messages(
+                ex["rejected"]
+            ):
                 removed_reasons["invalid_messages"] += 1
                 continue
 
@@ -80,9 +82,9 @@ def clean_file(path):
             cleaned.append(ex)
 
     # Write cleaned version back
-    with open(path, 'w') as f:
+    with open(path, "w") as f:
         for ex in cleaned:
-            f.write(json.dumps(ex) + '\n')
+            f.write(json.dumps(ex) + "\n")
 
     total_removed = sum(removed_reasons.values())
     print(f"  {path.name}: {len(cleaned)} kept, {total_removed} removed")
@@ -105,8 +107,8 @@ if __name__ == "__main__":
             total_cleaned += cleaned
             total_removed += removed
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Total: {total_cleaned} rows kept, {total_removed} rows removed")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print("\nRe-run validation to confirm:")
     print("  python3 validate_datasets.py")
