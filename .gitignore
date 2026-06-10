@@ -18,3 +18,9 @@ wheels/
 *.ipynb
 *.md
 docs/*
+
+# RQ1 large artifacts (representations, tables, figures)
+representations/rq1/*.npy
+rq1/artifacts/*.parquet
+rq1/artifacts/*.json
+rq1/figures/*.png
