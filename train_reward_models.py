@@ -8,6 +8,7 @@ Usage:
     python train_reward_model.py --dataset summarize
     python train_reward_model.py --all
 """
+
 import sys
 import argparse
 import torch
@@ -52,12 +53,11 @@ def compute_metrics(eval_pred):
 def train_model(dataset_name: str, resume_from: str = None, smoke_test: bool = False):
     """Train one reward model on the specified dataset."""
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Training reward model on: {dataset_name}")
     if smoke_test:
         print("  *** SMOKE TEST MODE — 100 samples, 50 steps ***")
-    print(f"{'='*60}")
-
+    print(f"{'=' * 60}")
 
     # Init W&B
     run = wandb.init(
@@ -84,7 +84,7 @@ def train_model(dataset_name: str, resume_from: str = None, smoke_test: bool = F
         train_ds = train_ds.select(range(min(100, len(train_ds))))
         val_ds = val_ds.select(range(min(20, len(val_ds))))
 
-    # Truncate to exactly 10k rows 
+    # Truncate to exactly 10k rows
     train_ds = train_ds.select(range(min(MAX_TRAIN, len(train_ds))))
     val_ds = val_ds.select(range(min(MAX_VAL, len(val_ds))))
 
@@ -199,16 +199,30 @@ def train_model(dataset_name: str, resume_from: str = None, smoke_test: bool = F
     del model, trainer
     torch.cuda.empty_cache()
 
-    return final_metrics    
+    return final_metrics
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", type=str, choices=ALL_DATASETS, help="Which dataset to train on")
-    parser.add_argument("--all", action="store_true", help="Train all 3 real models sequentially")
-    parser.add_argument("--all-shuffled", action="store_true", help="Train the 2 shuffled-null models sequentially")
-    parser.add_argument("--smoke-test", action="store_true", help="Run quick validation (100 samples, 20 steps)")
-    parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume from")
+    parser.add_argument(
+        "--dataset", type=str, choices=ALL_DATASETS, help="Which dataset to train on"
+    )
+    parser.add_argument(
+        "--all", action="store_true", help="Train all 3 real models sequentially"
+    )
+    parser.add_argument(
+        "--all-shuffled",
+        action="store_true",
+        help="Train the 2 shuffled-null models sequentially",
+    )
+    parser.add_argument(
+        "--smoke-test",
+        action="store_true",
+        help="Run quick validation (100 samples, 20 steps)",
+    )
+    parser.add_argument(
+        "--resume", type=str, default=None, help="Path to checkpoint to resume from"
+    )
     args = parser.parse_args()
 
     if args.smoke_test:
@@ -231,7 +245,9 @@ if __name__ == "__main__":
             results[ds_name] = train_model(ds_name)
 
         # Send final completion alert
-        summary = "\n".join(f"  {k}: loss={v['eval_loss']:.4f}" for k, v in results.items())
+        summary = "\n".join(
+            f"  {k}: loss={v['eval_loss']:.4f}" for k, v in results.items()
+        )
         wandb.init(project=WANDB_PROJECT, name="pipeline-complete", reinit=True)
         wandb.alert(
             title="ALL 3 REWARD MODELS TRAINED",
@@ -240,13 +256,21 @@ if __name__ == "__main__":
         )
         wandb.finish()
 
-        print("\n\n" + "="*60)
+        print("\n\n" + "=" * 60)
         print("ALL TRAINING COMPLETE")
-        print("="*60)
+        print("=" * 60)
         print(summary)
     elif args.all_shuffled:
         for ds_name in SHUFFLED_DATASETS:
-            train_model(ds_name)
+            # Skip models already finished (complete best/ dir present), so a
+            # mid-pipeline restart doesn't redo work.
+            best_weights = CHECKPOINT_DIR / ds_name / "best" / "model.safetensors"
+            if best_weights.exists():
+                print(f"\nSkipping {ds_name}: {best_weights} already exists.")
+                continue
+            # --resume applies only to the first model we actually run.
+            train_model(ds_name, resume_from=args.resume)
+            args.resume = None
         print("\nShuffled-null models trained. Extract reps, then compute C-control.")
     elif args.dataset:
         train_model(args.dataset, resume_from=args.resume)
