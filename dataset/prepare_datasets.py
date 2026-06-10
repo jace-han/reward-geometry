@@ -9,8 +9,10 @@ N_VAL = 15_000
 SEED = 42
 OUTPUT_DIR = Path("dataset")
 
+
 def format_hh_rlhf(example):
     """Parse Anthropic hh-rlhf string format into chat messages."""
+
     def parse_conversation(text):
         messages = []
         parts = text.strip().split("\n\nHuman: ")
@@ -24,16 +26,19 @@ def format_hh_rlhf(example):
             else:
                 messages.append({"role": "user", "content": part.strip()})
         return messages
+
     return {
         "chosen": parse_conversation(example["chosen"]),
         "rejected": parse_conversation(example["rejected"]),
     }
+
 
 def format_ultrafeedback(example):
     return {
         "chosen": example["chosen"],
         "rejected": example["rejected"],
     }
+
 
 def format_summarize_feedback(example):
     post = example["info"]["post"]
@@ -47,9 +52,13 @@ def format_summarize_feedback(example):
         ],
         "rejected": [
             {"role": "user", "content": prompt},
-            {"role": "assistant", "content": example["summaries"][rejected_idx]["text"]},
+            {
+                "role": "assistant",
+                "content": example["summaries"][rejected_idx]["text"],
+            },
         ],
     }
+
 
 if __name__ == "__main__":
     datasets_config = {
@@ -101,7 +110,9 @@ if __name__ == "__main__":
         n_val = min(len(val_raw), N_VAL)
         val_split = val_raw.select(range(n_val))
 
-        train_split = train_split.map(cfg["formatter"], remove_columns=train_raw.column_names)
+        train_split = train_split.map(
+            cfg["formatter"], remove_columns=train_raw.column_names
+        )
         val_split = val_split.map(cfg["formatter"], remove_columns=val_raw.column_names)
         train_split.to_json(OUTPUT_DIR / f"{key}_train.jsonl")
         val_split.to_json(OUTPUT_DIR / f"{key}_val.jsonl")
